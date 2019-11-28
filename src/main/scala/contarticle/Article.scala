@@ -23,7 +23,7 @@ object Domain {
 object Article extends App {
 	import Domain._
 
-	// Let's say we have a program which may fail if if of nonexistent user will be passed in.
+	// Let's say we have a program which may fail if nonexistent user will be passed in.
 	// Notice that this program is written in a so called "direct style", which means that runtime
 	// takes care to determine what line of code should be executed next.
 	// One could say that control flow defined "implicitly" by runtime internals.
@@ -65,7 +65,7 @@ object OptionalCPSExample extends App {
 	// It reminds exceptions - they also allows to short-circuit execution by throwing an exception.
 	// To implement an idea of stopping execution at some point we need a reified notion of execution itself.
 	// But what is an execution? How could it be captured? What is an execution unit?
-	// Seems like we do not have much choice, but functions as reified execution.
+	// Seems like we do not have much choice but use functions as reified execution.
 	// Let's try to abstract over the null check keeping an ideas above in mind:
 	// v: T - is a called-by-name code block of type T which could return null
 	// k: T => R - is a rest of a program, captured as a function.
@@ -80,7 +80,7 @@ object OptionalCPSExample extends App {
 	// Now the program is safe, but let's take a closer look on the control flow:
 	def programOptional(id: Long): Info = {
 		optional(getUser(id)) { user: User => // this function is our "k: T => R" where T - User and R - Info
-			optional(getInfo(user))(identity)		// one need to call identity as the rest of computation to acquire the value from previous step
+			optional(getInfo(user))(identity)		// one need to call identity as the rest of computation to acquire the value from the previous step
 		}
 	}
 	// Seems like each next step of computation now is handled explicitly as a function call.
@@ -97,7 +97,7 @@ object ContinuationExample extends App {
 	// Let's try to extract a continuation signature from example with "optional":
 	// (A => R) - continuation or representation of the "rest of the program."
 	// this function will be called with a value of type A and returns a value of type R,
-	// which, it turn, will be returned to a caller.
+	// which, in turn, will be returned to a caller.
 	// Lets sum it up:
 	// R - is the return type of ALL computation.
 	// A - is the type of a value passed to continuation.
@@ -129,7 +129,7 @@ object ContinuationComposition extends App {
 	// each computation have a superpower to "go to" continuation with some value
 	// this value been placed on an imaginary stack
 	// next computation have an access to that value and can call its continuation with it or some other value
-	// when the last value being computed it is returned to a caller.
+	// when the last value being computed it will be returned to a caller.
 	// Seems like small runtime with it's own control flow rules.
 	// Lets try to capture them:
 	// (run: (A => R) => R) - continuation
