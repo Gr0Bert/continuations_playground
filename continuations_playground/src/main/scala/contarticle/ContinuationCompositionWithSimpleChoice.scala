@@ -15,7 +15,7 @@ object ContinuationCompositionWithSimpleChoice extends App {
 
 	// Lets explore an opportunity to make a choice - return a different value, say, specific error.
 	// All we need - just a function which return the value of the R (result) type.
-	def optional[R, T](v: T, ifNull: () => R): Continuation[R, T] =
+	def optionalSimpleChoise[R, T](v: T, ifNull: () => R): Continuation[R, T] =
 		Continuation((k: T => R) =>
 			if (v != null) {
 				k(v)
@@ -24,12 +24,12 @@ object ContinuationCompositionWithSimpleChoice extends App {
 			}
 		)
 
-	def programOptional[R](id: Long)(ifNull: () => R): Continuation[R, Info] =
-		optional(getUser(id), ifNull).flatMap{ user =>
-			optional(getInfo(user), ifNull)
+	def programOptionalSimpleChoise[R](id: Long)(ifNull: () => R): Continuation[R, Info] =
+		optionalSimpleChoise(getUser(id), ifNull).flatMap{ user =>
+			optionalSimpleChoise(getInfo(user), ifNull)
 		}
 
 	val ifNull = () => "Error: null"
-	assert(programOptional(123)(ifNull).map(_.name).run(identity) == "Tom")
-	assert(programOptional(1234)(ifNull).map(_.name).run(identity) == ifNull())
+	assert(programOptionalSimpleChoise(123)(ifNull).map(_.name).run(identity) == "Tom")
+	assert(programOptionalSimpleChoise(1234)(ifNull).map(_.name).run(identity) == ifNull())
 }

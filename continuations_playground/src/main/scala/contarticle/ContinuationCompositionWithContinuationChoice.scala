@@ -15,7 +15,7 @@ object ContinuationCompositionWithContinuationChoice extends App {
 
 	// What if one want to pass a continuation as another path of execution?
 	// Easy - just run it inside!
-	def optional[R, T](v: T, ifNull: () => Continuation[R, T]): Continuation[R, T] =
+	def optionalContinuationChoise[R, T](v: T, ifNull: () => Continuation[R, T]): Continuation[R, T] =
 		Continuation((k: T => R) =>
 			if (v != null) {
 				k(v)
@@ -25,14 +25,14 @@ object ContinuationCompositionWithContinuationChoice extends App {
 		)
 
 	// Notice that ifNull return type is  Continuation[R, Null]
-	// Null
-	def programOptional[R, T](id: Long)(ifNull: () => Continuation[R, Null]): Continuation[R, Info] =
-		optional[R, User](getUser(id), ifNull).flatMap{ user =>
-			optional[R, Info](getInfo(user), ifNull)
+	// Null - because it is a subtype of every AnyRef type and we can pass any AnyRef value to continuation.
+	// In this example it could be values of either User or Info.
+	def programOptionalContinuationChoise[R, T](id: Long)(ifNull: () => Continuation[R, Null]): Continuation[R, Info] =
+		optionalContinuationChoise[R, User](getUser(id), ifNull).flatMap{ user =>
+			optionalContinuationChoise[R, Info](getInfo(user), ifNull)
 		}
 
-	// Null - because this continuation could be Either called with value of type User or Info
-	val ifNull = () => Continuation[String, Null](_ => "Error: null")
-	assert(programOptional(123)(ifNull).map(_.name).run(identity) == "Tom")
-	assert(programOptional(1234)(ifNull).map(_.name).run(identity) == "Error: null")
+	val ifNullCont = () => Continuation[String, Null](_ => "Error: null")
+	assert(programOptionalContinuationChoise(123)(ifNullCont).map(_.name).run(identity) == "Tom")
+	assert(programOptionalContinuationChoise(1234)(ifNullCont).map(_.name).run(identity) == "Error: null")
 }

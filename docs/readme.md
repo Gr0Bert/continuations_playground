@@ -21,7 +21,7 @@ def getInfo(user: User): Info = {
     info.getOrElse(user.id, null)
 }
 ```
-[SimpleNullChecks.scala](continuations_playground/src/main/scala/contarticle/SimpleNullChecks.scala)
+[SimpleNullChecks.scala](continuations_playground/src/main/scala/contarticle/SimpleNullChecks.scala)  
 Let's say we have a program which may fail if nonexistent user will be passed in.
 Notice that this program is written in a so called "direct style", which means that runtime
 takes care to determine what line of code should be executed next.
@@ -54,7 +54,7 @@ programNullChecked(1234)
 Clearly the program now is safe. But can we do better? Can we make such checkings composable?  
 Let's take another look on our problem: clearly all those null checks are a duplicating code.
 Could all those checkings be abstracted somehow?  
-[OptionalCPSExample.scala](continuations_playground/src/main/scala/contarticle/OptionalCPSExample.scala)
+[OptionalCPSExample.scala](continuations_playground/src/main/scala/contarticle/OptionalCPSExample.scala)  
 It turns out that yes, but to do so one should switch a point of view on the problem:  
 Having functions, each executing with the return value of the previous one, can they be short-circuited
 in a way, that if previous returns null next one will not be ever called?  
@@ -86,3 +86,309 @@ programOptional(1234)
 ```
 Seems like each next step of computation now is handled explicitly as a function call.
 This approach gave more control over execution and opened a way to a composition of a succeeding calls.  
+[ContinuationExample.scala](continuations_playground/src/main/scala/contarticle/ContinuationExample.scala)  
+The notion of the "rest of the program" has a name on it's own - "continuation"
+Let's try to extract a continuation signature from example with "optional":  
+(A => R) - continuation or representation of the "rest of the program."
+this function will be called with a value of type A and returns a value of type R,
+which, in turn, will be returned to a caller.  
+Lets sum it up:  
+R - is the return type of ALL computation.  
+A - is the type of a value passed to continuation.  
+```scala mdoc:reset:invisible
+case class User(id: Long)
+case class Info(name: String)
+val users = Map(123L -> User(123))
+val info = Map(123L -> Info("Tom"))
+def getUser(id: Long): User = users.getOrElse(id, null)
+def getInfo(user: User): Info = info.getOrElse(user.id, null)
+```
+```scala mdoc
+type Continuation[R, A] = (A => R) => R
+```
+Lets try to use newly defined Continuation type:  
+```scala mdoc
+def optional[R, A](v: A): Continuation[R, A] =
+    (k: A => R) => {
+        if (v != null) {
+            k(v)
+        } else {
+            null.asInstanceOf[R]
+        }
+    }
+def programOptional(id: Long): Info =
+    optional(getUser(id)) { user =>
+        optional(getInfo(user))(identity)
+    }
+
+programOptional(123)
+programOptional(1234)
+```
+All this continuation stuff closely reminds me a stack operations:
+each computation have a superpower to "go to" continuation with some value
+this value been placed on an imaginary stack
+next computation have an access to that value and can call its continuation with it or some other value
+when the last value being computed it will be returned to a caller.
+Seems like small runtime with it's own control flow rules.  
+Lets try to capture them:  
+(run: (A => R) => R) - continuation  
+changeValue - changes value on "stack" before passing it to next computation  
+continueWith - continue execution with another continuation
+[ContinuationComposition.scala](continuations_playground/src/main/scala/contarticle/ContinuationComposition.scala)  
+```scala mdoc:reset:invisible
+case class User(id: Long)
+case class Info(name: String)
+val users = Map(123L -> User(123))
+val info = Map(123L -> Info("Tom"))
+def getUser(id: Long): User = users.getOrElse(id, null)
+def getInfo(user: User): Info = info.getOrElse(user.id, null)
+```
+```scala mdoc
+case class Continuation[R, +A](run: (A => R) => R) {
+    // Notice f type - it takes A as a parameter. This is because it modifies the value passed to the continuation.
+    def changeValue[B](f: A => B): Continuation[R, B] = {
+        this.continueWith((a: A) => Continuation(k => k(f(a)))) // You can clearly see this here - f called first, then it's result passed next to a continuation.
+    }
+
+    def continueWith[B](f: A => Continuation[R, B]): Continuation[R, B] = {
+        Continuation(k => run(a => f(a).run(k)))
+    }
+}
+```
+Lets redefine optional in terms of Continuation  
+```scala mdoc
+def optional[R, T](v: T): Continuation[R, T] =
+    Continuation((k: T => R) =>
+        if (v != null) {
+            k(v)
+        } else {
+            null.asInstanceOf[R]
+        }
+    )
+```
+Now the program could be defined in terms of composition operators.  
+```scala mdoc
+def programOptional[R](id: Long): Continuation[R, Info] =
+    optional(getUser(id)).continueWith{ user =>
+        optional(getInfo(user))
+    }
+
+programOptional(123).run(identity)
+programOptional(1234).run(identity)
+```
+[MonadicOptional.scala](continuations_playground/src/main/scala/contarticle/MonadicOptional.scala)  
+Is there another way to conquer the problem with nulls?  
+Turned out it is monads. Without additional theory let's represent them as an interface:
+```scala mdoc:reset:invisible
+case class User(id: Long)
+case class Info(name: String)
+val users = Map(123L -> User(123))
+val info = Map(123L -> Info("Tom"))
+def getUser(id: Long): User = users.getOrElse(id, null)
+def getInfo(user: User): Info = info.getOrElse(user.id, null)
+```
+```scala mdoc
+trait Monad[F[_]] {
+    def pure[A](v: A): F[A] // the way to create instance of a Monad
+    def map[A, B](fa: F[A])(f: A => B): F[B] // the way to change value "inside" the monad
+    def flatMap[A, B](fa: F[A])(f: A => F[B]): F[B] // the way to compose two monads
+}
+```  
+Lets define algebraic data type Optional with two children: Just and Nothing.
+```scala mdoc
+sealed trait Optional[+T] {
+    // those functions just convinient wrappers on top of monad implementation
+    def map[B](f: T => B)(implicit M: Monad[Optional]): Optional[B] = M.map(this)(f)
+    def flatMap[B](f: T => Optional[B])(implicit M: Monad[Optional]): Optional[B] = M.flatMap(this)(f)
+}
+// Represents existence of a value.
+final case class Just[+A](value: A) extends Optional[A]
+// Represents absence of a value.
+final case object Nothing extends Optional[Nothing]
+```
+And provide companion object with implementation of Monad typeclass and Monad constructor:
+```scala mdoc
+object Optional {
+    // also a wrapper around Monad implementation
+    def pure[A](v: A)(implicit M: Monad[Optional]): Optional[A] = M.pure(v)
+
+    // Implementation of a monad
+    implicit val monadOptional: Monad[Optional] = new Monad[Optional] {
+        override def pure[A](v: A): Optional[A] = if (v == null) Nothing else Just(v)
+        override def map[A, B](fa: Optional[A])(f: A => B): Optional[B] = flatMap(fa)((v: A) => pure(f(v)))
+        // Pay attention how close is this code to "optional" function definde earlier.
+        override def flatMap[A, B](fa: Optional[A])(f: A => Optional[B]): Optional[B] =
+            fa match {
+                case Just(value) => f(value)
+                case Nothing => Nothing
+            }
+    }
+}
+```
+This is how the program can be rewritten with newly defined Optional monad.  
+```scala mdoc
+def programOptional[R](id: Long): Optional[Info] =
+    Optional.pure(getUser(id)).flatMap{ user =>
+        Optional.pure(getInfo(user))
+    }
+
+programOptional(123)
+programOptional(1234)
+```
+There is also a few laws each monad implementation should follow.  
+In reality some implementations just pretending to be monads and not following the laws, but it is not the case with Optional.  
+```scala mdoc
+	val a = 1
+val f = (x: Int) => Optional.pure(x + 1)
+val g = (x: Int) => Optional.pure(x * 2)
+Optional.pure(a).flatMap(f) == f(a) // left identity
+Optional.pure(a).flatMap(Optional.pure) == Optional.pure(a) // right identity
+Optional.pure(a).flatMap(f).flatMap(g) == Optional.pure(a).flatMap(x => f(x).flatMap(g)) // associativity
+```
+Clearly Optional follows all three laws and can be called a monad.  
+[OptionalEmbedding.scala](continuations_playground/src/main/scala/contarticle/OptionalEmbedding.scala)  
+```scala mdoc:reset:invisible
+case class User(id: Long)
+case class Info(name: String)
+val users = Map(123L -> User(123))
+val info = Map(123L -> Info("Tom"))
+def getUser(id: Long): User = users.getOrElse(id, null)
+def getInfo(user: User): Info = info.getOrElse(user.id, null)
+trait Monad[F[_]] {
+    def pure[A](v: A): F[A]
+    def map[A, B](fa: F[A])(f: A => B): F[B]
+    def flatMap[A, B](fa: F[A])(f: A => F[B]): F[B]
+}
+sealed trait Optional[+T] {
+    def map[B](f: T => B)(implicit M: Monad[Optional]): Optional[B] = M.map(this)(f)
+    def flatMap[B](f: T => Optional[B])(implicit M: Monad[Optional]): Optional[B] = M.flatMap(this)(f)
+}
+final case class Just[+A](value: A) extends Optional[A]
+final case object Nothing extends Optional[Nothing]
+
+object Optional {
+    def pure[A](v: A)(implicit M: Monad[Optional]): Optional[A] = M.pure(v)
+    implicit val monadOptional: Monad[Optional] = new Monad[Optional] {
+        override def pure[A](v: A): Optional[A] = if (v == null) Nothing else Just(v)
+        override def map[A, B](fa: Optional[A])(f: A => B): Optional[B] = flatMap(fa)((v: A) => pure(f(v)))
+        override def flatMap[A, B](fa: Optional[A])(f: A => Optional[B]): Optional[B] =
+            fa match {
+                case Just(value) => f(value)
+                case Nothing => Nothing
+            }
+    }
+}
+```
+The close resemblance between monads and continuations should lead to some discoveries.  
+Lets try to pretend that Continuation is a monad:  
+```scala mdoc
+case class Continuation[R, +A](run: (A => R) => R) {
+    def map[B](f: A => B): Continuation[R, B] = {
+        this.flatMap((a: A) => Continuation(k => k(f(a))))
+    }
+
+    def flatMap[B](f: A => Continuation[R, B]): Continuation[R, B] = {
+        Continuation(k => run(a => f(a).run(k)))
+    }
+}
+
+object Continuation {
+    def pure[R, T](v: T): Continuation[R, T] = Continuation[R, T](k => k(v))
+}
+```
+Close enough, lets check if the laws are satisfied.  
+```scala mdoc
+	val a = 1
+	val f = (x: Int) => Continuation.pure[Int, Int](x + 1)
+	val g = (x: Int) => Continuation.pure[Int, Int](x * 2)
+	Continuation.pure(a).flatMap(f).run(identity) == f(a).run(identity) // left identity
+	Continuation.pure(a).flatMap(Continuation.pure[Int, Int]).run(identity) == Continuation.pure(a).run(identity) // right identity
+	Continuation.pure(a).flatMap(f).flatMap(g).run(identity) == Continuation.pure(a).flatMap(x => f(x).flatMap(g)).run(identity) // associativity
+```
+Turns out that the laws are satisfied and Continuations could be represented as monads.  
+But what kind of monad is a Continuation? I mean - what is it actually doing?  
+It turns out that Continuation is a monad which is doing nothing except passing the values.  
+Maybe there is a way to compose Optional and Continuation?  
+This way there will be more evidence to their close relations and, perhaps, Continuation will mimic Optional?  
+```scala mdoc
+// embed - creates a Continuation out of Optional.
+def embed[R, T](x: Optional[T]): Continuation[Optional[R], T] = Continuation[Optional[R], T](k => x.flatMap(k))
+// run - run the Continuation.
+def run[T](m: Continuation[Optional[T], T]): Optional[T] = m.run(x => Optional.pure(x))
+```
+Seems like a safe version of a program.  
+```scala mdoc
+def programOptional[R](id: Long): Continuation[Optional[R], Info] =
+    embed(Optional.pure(getUser(id))).flatMap{ user =>
+        embed(Optional.pure(getInfo(user)))
+    }
+
+run(programOptional[Info](123))
+run(programOptional[Info](1234))
+```
+[MonadicEmbedding.scala](continuations_playground/src/main/scala/contarticle/MonadicEmbedding.scala)  
+Can any Monad be embedded into Continuation? Yes! Lets do it!  
+```scala mdoc
+def embedM[R, T, M[_]](x: M[T])(implicit M: Monad[M]): Continuation[M[R], T] = Continuation[M[R], T](k => M.flatMap(x)(k))
+def runM[T, M[_]](m: Continuation[M[T], T])(implicit M: Monad[M]): M[T] = m.run(x => M.pure(x))
+
+def programOptionalM[R](id: Long)(implicit M: Monad[Optional]): Continuation[Optional[R], Info] =
+    embedM[R, User, Optional](Optional.pure(getUser(id))).flatMap{ user =>
+        embedM[R, Info, Optional](Optional.pure(getInfo(user)))
+    }
+
+runM(programOptionalM[Info](123))
+runM(programOptionalM[Info](1234))
+```
+[ContinuationCompositionWithSimpleChoice.scala](continuations_playground/src/main/scala/contarticle/ContinuationCompositionWithSimpleChoice.scala)
+Lets explore an opportunity to make a choice - return a different value, say, specific error.  
+All we need - just a function which return the value of the R (result) type.  
+```scala mdoc
+def optionalSimpleChoise[R, T](v: T, ifNull: () => R): Continuation[R, T] =
+    Continuation((k: T => R) =>
+        if (v != null) {
+            k(v)
+        } else {
+            ifNull()
+        }
+    )
+
+def programOptionalSimpleChoise[R](id: Long)(ifNull: () => R): Continuation[R, Info] =
+    optionalSimpleChoise(getUser(id), ifNull).flatMap{ user =>
+        optionalSimpleChoise(getInfo(user), ifNull)
+    }
+
+val ifNull = () => "Error: null"
+programOptionalSimpleChoise(123)(ifNull).map(_.name).run(identity)
+programOptionalSimpleChoise(1234)(ifNull).map(_.name).run(identity)
+```
+[ContinuationCompositionWithContinuationChoice.scala](continuations_playground/src/main/scala/contarticle/ContinuationCompositionWithContinuationChoice.scala)
+What if one want to pass a continuation as another path of execution?
+Easy - just run it inside!
+```scala mdoc
+def optionalContinuationChoise[R, T](v: T, ifNull: () => Continuation[R, T]): Continuation[R, T] =
+    Continuation((k: T => R) =>
+        if (v != null) {
+            k(v)
+        } else {
+            ifNull().run(k)
+        }
+    )
+```  
+Notice that ifNull return type is `Continuation[R, Null]`
+Null - because it is a subtype of every AnyRef type and we can pass any AnyRef value to continuation.
+In this example it could be values of either User or Info.  
+```scala mdoc
+def programOptionalContinuationChoise[R, T](id: Long)(ifNull: () => Continuation[R, Null]): Continuation[R, Info] =
+    optionalContinuationChoise[R, User](getUser(id), ifNull).flatMap{ user =>
+        optionalContinuationChoise[R, Info](getInfo(user), ifNull)
+    }
+
+val ifNullCont = () => Continuation[String, Null](_ => "Error: null")
+programOptionalContinuationChoise(123)(ifNullCont).map(_.name).run(identity)
+programOptionalContinuationChoise(1234)(ifNullCont).map(_.name).run(identity)
+```
+[CallCC.scala](continuations_playground/src/main/scala/contarticle/CallCC.scala)  
+[OtherExamplesOfCallCC.scala](continuations_playground/src/main/scala/contarticle/OtherExamplesOfCallCC.scala)  
+[MotherOfAllMonadsExamples.scala](continuations_playground/src/main/scala/contarticle/MotherOfAllMonadsExamples.scala)  
+[HackageContExamples.scala](continuations_playground/src/main/scala/contarticle/HackageContExamples.scala)  
