@@ -1,10 +1,17 @@
-name := "continuations_playground"
+ThisBuild / scalaVersion := "2.13.1"
 
-version := "0.1"
+lazy val continuationsPlayground = project
+	.settings(
+		name := "continuations-playground",
+		version := "0.1",
+		libraryDependencies ++= Seq(
+			"org.typelevel" %% "cats-core" % "2.0.0",
+			"org.typelevel" %% "cats-effect" % "2.0.0",
+		)
+	)
+	.in(file("continuations-playground"))
 
-scalaVersion := "2.13.1"
-
-libraryDependencies ++= Seq(
-	"org.typelevel" %% "cats-core" % "2.0.0",
-	"org.typelevel" %% "cats-effect" % "2.0.0",
-)
+lazy val docs = project
+	.in(file("continuations-playground-docs"))
+	.enablePlugins(MdocPlugin)
+	.dependsOn(continuationsPlayground)
