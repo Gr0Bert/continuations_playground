@@ -1,6 +1,6 @@
 package contarticle
 
-// Special thanks to https://gist.github.com/Odomontois for providing this nice implementation!
+// Special thanks to https://github.com/Odomontois for providing this nice implementation!
 object ContinuationMonadTrait extends App {
 	import Domain._
 

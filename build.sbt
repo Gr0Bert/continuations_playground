@@ -15,3 +15,6 @@ lazy val docs = project
 	.in(file("continuations_playground_docs"))
 	.enablePlugins(MdocPlugin)
 	.dependsOn(continuationsPlayground)
+  .settings(
+		mdocOut := file(".")
+	)

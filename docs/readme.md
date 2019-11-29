@@ -1,6 +1,11 @@
 # Continuations playground
 
-Recently I explored the concept of “continuation” and gathered lots of code samples along the way. I decided to make this repository to allow users to check it out and play with those samples. I hope such a format will be a positive experience.  
+Recently I explored the concept of “continuation” and gathered lots of code samples along the way. 
+I decided to make this repository to allow users to check it out and play with those samples and hope such a format will be a positive experience.  
+This work is heavily inspired by:  
+Philip Wadler "Comprehending Monads",
+Andrzej Filinski "Representing Monads",
+and ["Mother of all monads"](http://blog.sigfpe.com/2008/12/mother-of-all-monads.html) blog post.
 Lets start with domain which will be used throughout the article.  
 [Domain.scala](continuations_playground/src/main/scala/contarticle/Domain.scala)
 ```scala mdoc
@@ -438,3 +443,5 @@ http://blog.sigfpe.com/2008/12/mother-of-all-monads.html
 Translation of same Hackage examples from documentation of ConT onto Scala.  
 http://hackage.haskell.org/package/mtl-2.2.2/docs/Control-Monad-Cont.html  
 [HackageContExamples.scala](continuations_playground/src/main/scala/contarticle/HackageContExamples.scala)  
+Special thanks to https://github.com/Odomontois for providing this nice Continuation monad implementation!
+[ContinuationMonadTrait.scala](continuations_playground/src/main/scala/contarticle/ContinuationMonadTrait.scala)  
