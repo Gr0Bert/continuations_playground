@@ -2,7 +2,7 @@
 
 Recently I explored the concept of “continuation” and gathered lots of code samples along the way. I decided to make this repository to allow users to check it out and play with those samples. I hope such a format will be a positive experience.  
 Lets start with domain which will be used throughout the article.  
-[Domain.scala](../contunuations_playground/contarticle/Domain.scala)
+[Domain.scala](continuations_playground/src/main/scala/contarticle/Domain.scala)
 ```scala
 // Domain models
 case class User(id: Long)
@@ -26,7 +26,7 @@ def getInfo(user: User): Info = {
     info.getOrElse(user.id, null)
 }
 ```
-[SimpleNullChecks.scala](../contunuations_playground/contarticle/SimpleNullChecks.scala)
+[SimpleNullChecks.scala](continuations_playground/src/main/scala/contarticle/SimpleNullChecks.scala)
 Let's say we have a program which may fail if nonexistent user will be passed in.
 Notice that this program is written in a so called "direct style", which means that runtime
 takes care to determine what line of code should be executed next.
@@ -65,7 +65,7 @@ programNullChecked(1234)
 Clearly the program now is safe. But can we do better? Can we make such checkings composable?  
 Let's take another look on our problem: clearly all those null checks are a duplicating code.
 Could all those checkings be abstracted somehow?  
-[OptionalCPSExample.scala](../contunuations_playground/contarticle/OptionalCPSExample.scala)
+[OptionalCPSExample.scala](continuations_playground/src/main/scala/contarticle/OptionalCPSExample.scala)
 It turns out that yes, but to do so one should switch a point of view on the problem:  
 Having functions, each executing with the return value of the previous one, can they be short-circuited
 in a way, that if previous returns null next one will not be ever called?  
