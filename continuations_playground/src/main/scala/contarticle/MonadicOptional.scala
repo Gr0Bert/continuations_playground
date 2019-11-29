@@ -41,7 +41,7 @@ object MonadicOptional extends App {
 	}
 
 	// This how the program can be rewritten with newly defined Optional monad.
-	def programOptional[R](id: Long): Optional[Info] =
+	def programOptional(id: Long): Optional[Info] =
 		Optional.pure(getUser(id)).flatMap{ user =>
 			Optional.pure(getInfo(user))
 		}

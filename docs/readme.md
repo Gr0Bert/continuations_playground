@@ -3,12 +3,12 @@
 Recently I explored the concept of “continuation” and gathered lots of code samples along the way. 
 I decided to make this repository to allow users to check it out and play with those samples and hope such a format will be a positive experience.  
 This work is heavily inspired by:  
-Philip Wadler "Comprehending Monads",
-Andrzej Filinski "Representing Monads",
-and ["Mother of all monads"](http://blog.sigfpe.com/2008/12/mother-of-all-monads.html) blog post.
+Philip Wadler "Comprehending Monads",  
+Andrzej Filinski "Representing Monads",  
+and ["Mother of all monads"](http://blog.sigfpe.com/2008/12/mother-of-all-monads.html) blog post.  
 Lets start with domain which will be used throughout the article.  
-[Domain.scala](continuations_playground/src/main/scala/contarticle/Domain.scala)
-```scala mdoc
+[Domain.scala](continuations_playground/src/main/scala/contarticle/Domain.scala)  
+```scala mdoc:silent
 // Domain models
 case class User(id: Long)
 case class Info(name: String)
@@ -68,8 +68,8 @@ To implement an idea of stopping execution at some point we need a reified notio
 But what is an execution? How could it be captured? What is an execution unit?
 Seems like we do not have much choice but use functions as reified execution.
 Let's try to abstract over the null check keeping an ideas above in mind:  
-v: T - is a called-by-name code block of type T which could return null  
-k: T => R - is a rest of a program, captured as a function.  
+`v: T` - is a called-by-name code block of type T which could return null  
+`k: T => R` - is a rest of a program, captured as a function.  
 ```scala mdoc
 def optional[R, T](v: => T)(k: T => R): R = {
     if (v != null) {
@@ -94,12 +94,12 @@ This approach gave more control over execution and opened a way to a composition
 [ContinuationExample.scala](continuations_playground/src/main/scala/contarticle/ContinuationExample.scala)  
 The notion of the "rest of the program" has a name on it's own - "continuation"
 Let's try to extract a continuation signature from example with "optional":  
-(A => R) - continuation or representation of the "rest of the program."
+`(A => R)` - continuation or representation of the "rest of the program."
 this function will be called with a value of type A and returns a value of type R,
 which, in turn, will be returned to a caller.  
 Lets sum it up:  
-R - is the return type of ALL computation.  
-A - is the type of a value passed to continuation.  
+`R` - is the return type of ALL computation.  
+`A` - is the type of a value passed to continuation.  
 ```scala mdoc:reset:invisible
 case class User(id: Long)
 case class Info(name: String)
@@ -128,18 +128,17 @@ def programOptional(id: Long): Info =
 
 programOptional(123)
 programOptional(1234)
-```
-All this continuation stuff closely reminds me a stack operations:
-each computation have a superpower to "go to" continuation with some value
-this value been placed on an imaginary stack
-next computation have an access to that value and can call its continuation with it or some other value
-when the last value being computed it will be returned to a caller.
+```  
+[ContinuationComposition.scala](continuations_playground/src/main/scala/contarticle/ContinuationComposition.scala)    
+All this continuation stuff closely reminds me a stack operations:  
+Each computation have a superpower to "go to" continuation with some value and this value is placed on an imaginary stack.  
+Next computation have an access to that value and can call its continuation with it or some other value.  
+When the last value being computed it will be returned to a caller.  
 Seems like small runtime with it's own control flow rules.  
 Lets try to capture them:  
-(run: (A => R) => R) - continuation  
-changeValue - changes value on "stack" before passing it to next computation  
-continueWith - continue execution with another continuation
-[ContinuationComposition.scala](continuations_playground/src/main/scala/contarticle/ContinuationComposition.scala)  
+`(run: (A => R) => R)` - continuation  
+`changeValue` - changes value on "stack" before passing it to next computation  
+`continueWith` - continue execution with another continuation  
 ```scala mdoc:reset:invisible
 case class User(id: Long)
 case class Info(name: String)
@@ -183,7 +182,7 @@ programOptional(1234).run(identity)
 ```
 [MonadicOptional.scala](continuations_playground/src/main/scala/contarticle/MonadicOptional.scala)  
 Is there another way to conquer the problem with nulls?  
-Turned out it is monads. Without additional theory let's represent them as an interface:
+Turned out it is - monads. Without additional theory let's represent them as an interface:
 ```scala mdoc:reset:invisible
 case class User(id: Long)
 case class Info(name: String)
@@ -232,7 +231,7 @@ object Optional {
 ```
 This is how the program can be rewritten with newly defined Optional monad.  
 ```scala mdoc
-def programOptional[R](id: Long): Optional[Info] =
+def programOptional(id: Long): Optional[Info] =
     Optional.pure(getUser(id)).flatMap{ user =>
         Optional.pure(getInfo(user))
     }
@@ -345,9 +344,9 @@ def programOptionalM[R](id: Long)(implicit M: Monad[Optional]): Continuation[Opt
 runM(programOptionalM[Info](123))
 runM(programOptionalM[Info](1234))
 ```
-[ContinuationCompositionWithSimpleChoice.scala](continuations_playground/src/main/scala/contarticle/ContinuationCompositionWithSimpleChoice.scala)
+[ContinuationCompositionWithSimpleChoice.scala](continuations_playground/src/main/scala/contarticle/ContinuationCompositionWithSimpleChoice.scala)  
 Lets explore an opportunity to make a choice - return a different value, say, specific error.  
-All we need - just a function which return the value of the R (result) type.  
+All we need - just a function which return the value of the `R` (result) type.  
 ```scala mdoc
 def optionalSimpleChoise[R, T](v: T, ifNull: () => R): Continuation[R, T] =
     Continuation((k: T => R) =>
@@ -367,7 +366,7 @@ val ifNull = () => "Error: null"
 programOptionalSimpleChoise(123)(ifNull).map(_.name).run(identity)
 programOptionalSimpleChoise(1234)(ifNull).map(_.name).run(identity)
 ```
-[ContinuationCompositionWithContinuationChoice.scala](continuations_playground/src/main/scala/contarticle/ContinuationCompositionWithContinuationChoice.scala)
+[ContinuationCompositionWithContinuationChoice.scala](continuations_playground/src/main/scala/contarticle/ContinuationCompositionWithContinuationChoice.scala)  
 What if one want to pass a continuation as another path of execution?
 Easy - just run it inside!
 ```scala mdoc
@@ -396,7 +395,7 @@ programOptionalContinuationChoise(1234)(ifNullCont).map(_.name).run(identity)
 [CallCC.scala](continuations_playground/src/main/scala/contarticle/CallCC.scala)  
 If you made it here then some hardcore content awaits: callCC function  
 which is a common abbreviation for call with current continuation.  
-Check it at wikipedia: https://www.wikiwand.com/en/Call-with-current-continuation.  
+Check it out at wikipedia: https://www.wikiwand.com/en/Call-with-current-continuation.  
 What this function does - gives an ability to jump to passed continuation (this, given by f)  
 The interesting thing is that continuation returned from f call - is the continuation returned by callCC itself.
 ```scala mdoc
