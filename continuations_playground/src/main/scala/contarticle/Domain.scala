@@ -1,6 +1,5 @@
 package contarticle
 
-// This article is supposed to be read from start to end.
 object Domain {
 	// Domain models
 	case class User(id: Long)
