@@ -390,6 +390,58 @@ programOptionalContinuationChoise(1234)(ifNullCont).map(_.name).run(identity)
 // res29: String = "Error: null"
 ```
 [CallCC.scala](continuations_playground/src/main/scala/contarticle/CallCC.scala)  
+If you made it here then some hardcore content awaits: callCC function  
+which is a common abbreviation for call with current continuation.  
+Check it at wikipedia: https://www.wikiwand.com/en/Call-with-current-continuation.  
+What this function does - gives an ability to jump to passed continuation (this, given by f)  
+The interesting thing is that continuation returned from f call - is the continuation returned by callCC itself.
+```scala
+def callCC[R, A, B](f: (A => Continuation[R, B]) => Continuation[R, A]): Continuation[R, A] = {
+    Continuation((k: A => R) => {           // continuation from following map and flatMap
+        f{(a: A) => 				        // argument to pass to continuation
+            Continuation((_: B => R) => {   // wrapper to make compiler happy on nested callCC, notice (B => R) continuation is ignored
+                k(a)	                    // actual call to following continuation in case continuation of this callCC will be used
+            })
+        }.run(k)                            // run in case some other continuation will be returned from call to f
+                                            // all in all both cases should provide same continuation types
+    })
+}
+```
+This how optional can be implemented in term of callCC.  
+```scala
+import Continuation._
+
+def optionalCallCC[R, T](v: T, ifNull: () => Continuation[R, T]): Continuation[R, T] =
+    callCC[R, T, T]((k: T => Continuation[R, T]) =>         // here "k" would be binded to (2) and following flatMap/map calls - see the optional implementation
+        callCC[R, T, T]((exit: T => Continuation[R, T]) =>  // here "exit" would be binded to (1)
+            if (v != null) {
+                k(v)
+            } else {
+                exit(v)
+            }
+        ).flatMap(_ => ifNull())                             // (1) ignore because it is always null
+    )
+
+
+def programOptionalCallCC[R, T](id: Long)(ifNull: () => Continuation[R, Null]): Continuation[R, Info] =
+    optionalCallCC[R, User](getUser(id), ifNull).flatMap{
+        user =>												        // (2)
+            optionalCallCC[R, Info](getInfo(user), ifNull)			// (2)
+    }
+
+
+val ifNullCallCC = () => Continuation[String, Null](_ => "Error: null")
+// ifNullCallCC: () => Continuation[String, Null] = <function0>
+programOptionalCallCC(123)(ifNullCallCC).map(_.name).run(identity)
+// res30: String = "Tom"
+programOptionalCallCC(1234)(ifNullCallCC).map(_.name).run(identity)
+// res31: String = "Error: null"
+```
+The following content is mostly about code samples. I recommend to check it out!  
 [OtherExamplesOfCallCC.scala](continuations_playground/src/main/scala/contarticle/OtherExamplesOfCallCC.scala)  
+Translation of Mothers of all monads article source code into Scala.  
+http://blog.sigfpe.com/2008/12/mother-of-all-monads.html  
 [MotherOfAllMonadsExamples.scala](continuations_playground/src/main/scala/contarticle/MotherOfAllMonadsExamples.scala)  
+Translation of same Hackage examples from documentation of ConT onto Scala.  
+http://hackage.haskell.org/package/mtl-2.2.2/docs/Control-Monad-Cont.html  
 [HackageContExamples.scala](continuations_playground/src/main/scala/contarticle/HackageContExamples.scala)  

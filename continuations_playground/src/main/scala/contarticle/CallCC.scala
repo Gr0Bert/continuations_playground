@@ -37,7 +37,7 @@ object CallCC extends App {
 
 	// This how optional can be implemented in term of callCC.
 	import Continuation._
-	def optional[R, T](v: T, ifNull: () => Continuation[R, T]): Continuation[R, T] =
+	def optionalCallCC[R, T](v: T, ifNull: () => Continuation[R, T]): Continuation[R, T] =
 		callCC[R, T, T]((k: T => Continuation[R, T]) => // here "k" would be binded to (2) and following flatMap/map calls - see the optional implementation
 			callCC[R, T, T]((exit: T => Continuation[R, T]) => // here "exit" would be binded to (1)
 				if (v != null) {
@@ -48,13 +48,13 @@ object CallCC extends App {
 			).flatMap(_ => ifNull()) // (1) ignore because it is always null
 		)
 
-	def programOptional[R, T](id: Long)(ifNull: () => Continuation[R, Null]): Continuation[R, Info] =
-		optional[R, User](getUser(id), ifNull).flatMap{
+	def programOptionalCallCC[R, T](id: Long)(ifNull: () => Continuation[R, Null]): Continuation[R, Info] =
+		optionalCallCC[R, User](getUser(id), ifNull).flatMap{
 			user =>																					// (2)
-				optional[R, Info](getInfo(user), ifNull)			// (2)
+				optionalCallCC[R, Info](getInfo(user), ifNull)			// (2)
 		}
 
-	val ifNull = () => Continuation[String, Null](_ => "Error: null")
-	assert(programOptional(123)(ifNull).map(_.name).run(identity) == "Tom")
-	assert(programOptional(1234)(ifNull).map(_.name).run(identity) == "Error: null")
+	val ifNullCallCC = () => Continuation[String, Null](_ => "Error: null")
+	assert(programOptionalCallCC(123)(ifNullCallCC).map(_.name).run(identity) == "Tom")
+	assert(programOptionalCallCC(1234)(ifNullCallCC).map(_.name).run(identity) == "Error: null")
 }
