@@ -404,8 +404,8 @@ def optionalCallCC[R, T](v: T, ifNull: () => Continuation[R, T]): Continuation[R
 
 def programOptionalCallCC[R, T](id: Long)(ifNull: () => Continuation[R, Null]): Continuation[R, Info] =
     optionalCallCC[R, User](getUser(id), ifNull).flatMap{
-        user =>												        // (2)
-            optionalCallCC[R, Info](getInfo(user), ifNull)			// (2)
+        user => // (2)
+            optionalCallCC[R, Info](getInfo(user), ifNull)  // (2)
     }
 
 val ifNullCallCC = () => Continuation[String, Null](_ => "Error: null")
