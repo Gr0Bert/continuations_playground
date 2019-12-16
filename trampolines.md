@@ -213,10 +213,12 @@ def callee(n: Int): Int = {
         nLoop -= 1
     } while (nLoop != 0)
     nLoop
-}
+}
+
 
 def caller(n: Int): Int =
-    callee(n)
+    callee(n)
+
 
 caller(1000000)
 // res0: Int = 0
@@ -227,10 +229,12 @@ As one can see it is verbose and could be rewritten more elegantly with recursio
 ```scala
 @scala.annotation.tailrec
 final def callee(n: Int): Int =
-    if (n == 0) n else callee(n - 1)
+    if (n == 0) n else callee(n - 1)
+
 
 def caller(n: Int): Int =
-    callee(n)
+    callee(n)
+
 
 caller(1000000)
 // res2: Int = 0
@@ -243,10 +247,12 @@ What if one wants a stack-safe mutual recursion? Like in the following example:
 [MutualRecursion.scala](continuations_playground/src/main/scala/trampolines/MutualRecursion.scala)
 ```scala
 def calleeA(n: Int): Int =
-    if (n == 0) n else calleeB(n - 1)
+    if (n == 0) n else calleeB(n - 1)
+
 
 def calleeB(n: Int): Int =
-    if (n == 0) n else calleeA(n - 1)
+    if (n == 0) n else calleeA(n - 1)
+
 
 def callerAB(n: Int) =
     calleeA(n)
@@ -262,11 +268,14 @@ Let's see how it could be done:
 [SimpleTrampoline.scala](continuations_playground/src/main/scala/trampolines/SimpleTrampoline.scala)
 ```scala
 // ADT for holding either thunk or result
-sealed trait Trampoline[+A]
+sealed trait Trampoline[+A]
+
 // structure which signalise that computation is over with the value `a` of type `A`
-final case class Done[A](result: A) extends Trampoline[A]
+final case class Done[A](result: A) extends Trampoline[A]
+
 // structure which holding a thunk, signalise that this thunk should be executed
-final case class More[A](f: () => Trampoline[A]) extends Trampoline[A]
+final case class More[A](f: () => Trampoline[A]) extends Trampoline[A]
+
 
 // trampoline itself, written as a while loop
 def run[A](t: Trampoline[A]): A = {
@@ -288,19 +297,23 @@ def run[A](t: Trampoline[A]): A = {
     }
     // return the actual result
     res.get
-}
+}
+
 
 // notice - every subsequent call is wrapped in `More`
 // this makes the function not to grow the stack,
 // but return with a thunk
 def calleeA(n: Int): Trampoline[Int] =
-    if (n == 0) Done(n) else More(() => calleeB(n - 1))
+    if (n == 0) Done(n) else More(() => calleeB(n - 1))
+
 
 def calleeB(n: Int): Trampoline[Int] =
-    if (n == 0) Done(n) else More(() => calleeA(n - 1))
+    if (n == 0) Done(n) else More(() => calleeA(n - 1))
+
 
 def callerAB(n: Int): Trampoline[Int] =
-    calleeA(n)
+    calleeA(n)
+
 
 run(callerAB(1000000))
 // res5: Int = 0
@@ -325,7 +338,8 @@ Consider the following example:
 def andThen[A, B, C](f: A => B, g: B => C): A => C = (a: A) => {
     val result = f(a)
     g(result)
-}
+}
+
 
 def id[A](a: A): A = a
 ```
@@ -373,7 +387,8 @@ def andThenTrampolined[A, B, C](f: A => Trampoline[B], g: B => Trampoline[C]): A
         val resultTrampoline = f(a) // returns Trampolined call
         val result = run(resultTrampoline) // run trampoline to obtain results
         g(result)
-    })
+    })
+
 
 def idTrampolined[A](a: A): Trampoline[A] = Done(a)
 ```
@@ -413,9 +428,12 @@ Let's start solving this puzzle with defining a structure which could handle the
 on a returning value:  
 [StackBasedTrampoline.scala](continuations_playground/src/main/scala/trampolines/StackBasedTrampoline.scala)
 ```scala
-sealed trait Trampoline[+A]
-final case class Done[A](result: A) extends Trampoline[A]
-final case class More[A](f: () => Trampoline[A]) extends Trampoline[A]
+sealed trait Trampoline[+A]
+
+final case class Done[A](result: A) extends Trampoline[A]
+
+final case class More[A](f: () => Trampoline[A]) extends Trampoline[A]
+
 // Cont for continuation
 // constructor for applying function on the right to value on the left
 // the point is to emulate the stack in the heap
@@ -496,7 +514,8 @@ Cont(Cont(Cont(Cont(Cont(Done(a), f'''), g'''), g''), g'), g)
 
 Now the code below will not overflow the stack:  
 ```scala
-def idTrampolined[A](a: A): Trampoline[A] = Done(a)
+def idTrampolined[A](a: A): Trampoline[A] = Done(a)
+
 
 run{
     List.fill(100000)(idTrampolined[Int](_)).foldLeft(idTrampolined[Int](_))(andThenTrampolined)(1)
@@ -522,11 +541,14 @@ final def run[A](t: Trampoline[A]): A = {
     }
 }
 ```
-To understand how Cont's structure being rewritten consider the following example:  
+To understand how Cont's structure being reassociated consider the following example:  
 ```scala
-def plusOne(x: Int): Trampoline[Int] = Done(x + 1)
-def plusTwo(x: Int): Trampoline[Int] = Done(x + 2)
-def plusThree(x: Int): Trampoline[Int] = Done(x + 3)
+def plusOne(x: Int): Trampoline[Int] = Done(x + 1)
+
+def plusTwo(x: Int): Trampoline[Int] = Done(x + 2)
+
+def plusThree(x: Int): Trampoline[Int] = Done(x + 3)
+
 
 // Here one have a deeply nested Cont's structure
 val res1 = 
