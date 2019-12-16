@@ -7,11 +7,11 @@ Those are reference materials I used while writing it:
 4.  [Tail Call Elimination in Scala Monads](https://apocalisp.wordpress.com/2011/10/26/tail-call-elimination-in-scala-monads/) by Runar Oli Bjarnason
 5. `The Hardware/Software Interface Class` by Luis Ceze and Gaetano Borriello. It's available on YouTube.  
 
-Before discussion on tail calls and various optimizations one need some context for understanding the problem.
+Before discussion on tail calls and various optimizations one need some context to understand the problem.
 Let's start with memory layout for programs.  
-As you can see form the picture below, stack starts from highest memory address and grows down,
+As you can see from the picture below, stack starts from highest memory address and grows down,
 while dynamic data grows up. When those two are colliding - bad things starting to happen,
-e.g. program will crash. What one wants to achieve is to remove the possibility of such things happening.
+e.g. program will crash. What one wants to achieve is to remove the possibility of such things happen.
 
 Memory layout:
 ```
@@ -30,17 +30,17 @@ Memory layout:
 +-------------------+	0
 ```
 To understand how such a collision could happen one need to know what causes stack and heap to grow and to shrink.
-I'm talking only about them because instructions, literals and static data are being initialized
-on a process start-up, so they are not dynamic.
+I'm talking only about them because areas containing instructions, literals and static data are being initialized
+on a process start-up and does not change during program execution.
 As for the heap - it's size increasing if something is allocated in it.
 In context of java or c - it is variables allocated with 'new' or malloc calls.
 Stack holds the procedure context.
 What is that context and why do we need it?
-Let's clear this up with a low level example on how functions call is working in stack-based languages.
+Let's clear this up with a low level example on how functions call is working in stack-based languages.  
 Consider two functions:  
 1. `caller`  
 2. `callee`  
-Now `caller` calls the `callee`, here are the steps which should be done:  
+Now `caller` calls the `callee:  
 ```
 `caller`
 <save registers> (3)
@@ -67,15 +67,17 @@ Assuming `caller` and `callee` running on the same CPU and uses the same registe
 	a. by `caller`, before calling the `callee`  
 	b. by `callee`, before using them  
 	c. by some combination of both.  
+
 The convention of where to find\leave things is called the `procedure call linkage`.  
-As you can see calling the procedure involving plenty of a machinery.
-Also each procedure instantiation should keep it's state, consisting of arguments, local variables and return address, somewhere,
+As you can see calling the procedure involves a plenty of machinery.
+Also each procedure instantiation should keep somewhere it's state, which is consists of arguments, local variables and return address,
 and it's turns out that this place is a stack.
 From now and on we consider that stack is allocated in frames,
 which contains an information needed to call the procedure, including the procedures state.
 Two implications immediately following from above:  
 1. each procedure call increase the stack size by adding it's stack frame  
-2. each procedure retun decrease the stack size by removing it's stack frame  
+2. each procedure return decrease the stack size by removing it's stack frame  
+
 Let's see how recursive calls would affect the stack given two fuctions `caller` and `callee`:  
 Here is a program:  
 ```
@@ -138,7 +140,7 @@ Yes, there is, and it's name `tail call optimization`.
 One could notice that if there is nothing to do with return value of callee, or, in other words,
 the call to callee is the final action of it's caller -
 then there is no purpose in storing the state of a caller, it means that it's frame
-could be replaced with callee frame thus avoiding the stack growth.
+could be replaced with callee frame avoiding the stack growth.
 If the caller and callee are the same function and call is the last action then such function
 is 'tail-recursive', which is a special case of recursion.
 The example above could be rewritten in the following way:
@@ -178,20 +180,21 @@ call `callee` (3)(2)(1)
 <do something with result>
 <return>
 ```
-###The situation with tail-calls on JVM.  
+### The situation with tail-calls on JVM.  
 
-In Java each active method has a stack frame associated with it and contains:
+In Java each active method has a stack frame associated with it which contains:
 1. Local data where local variables being stored.
-2. Dynamic link - reference to the frame of the caller method
-3. Return address
-4. Parameters of the current method
-There are several problems associated with general tail-call optimization:
+2. Dynamic link - reference to the frame of the caller method.
+3. Return address.
+4. Parameters of the current method.  
+
+There are several problems associated with general tail-call optimization:  
 1. State of each thread should be stored on the thread's stack.
 2. Exception handling actively using stack and exposes it to a programmer.
-3. Security model which is looking at permissions of each stack frame.
-And more.
+3. Security model which is looking at permissions of each stack frame.  
+And more.  
 
-So, is there a hope for people who wants general tail-call optimizaiton and stack-safety?
+So, is there a hope for people who wants general tail-call optimization and stack-safety?
 Yes - implementing a thing, called trampoline.
 The idea is to make each function to return a continuation that represents next tail call or the result
 of an entire computation. This functions being executed in a loop, called `trampoline` until result is available.
@@ -315,9 +318,9 @@ final def run[A](t: Trampoline[A]): A = {
 }
 ```
 This version I like much more.
-There is still a case where such approach will not work. What if one wants to to something after the value will be returned?
-Consider the following example:
-[FunctionCompositionProblem.scala](continuations_playground/src/main/scala/trampolines/FunctionCompositionProblem.scala)
+There is still a case where such approach will not work. What if one wants to do something after the value will be returned?  
+Consider the following example:  
+[FunctionCompositionProblem.scala](continuations_playground/src/main/scala/trampolines/FunctionCompositionProblem.scala)  
 ```scala
 def andThen[A, B, C](f: A => B, g: B => C): A => C = (a: A) => {
     val result = f(a)
@@ -349,19 +352,19 @@ tail -> ((((f''', g'''), g''), g'), g) <- head
 ``` 
 Let's check the stack during this calls:    
 ```
-    f_result = f(a)
-        f'_result = f'(a)
-            f''_result = f''(a)
-                f'''_result = f'''(a)
-                g'''_result = g'''(f'''_result)
-            g''_result = g''(f''_result)
-        g'_result = g'(f'_result)
-    g_result = g(f_result)
+f_result = f(a)
+    f'_result = f'(a)
+        f''_result = f''(a)
+            f'''_result = f'''(a)
+            g'''_result = g'''(f'''_result)
+        g''_result = g''(f''_result)
+    g'_result = g'(f'_result)
+g_result = g(f_result)
 ```
 In the picture above inner function returns the value to the first variable above it, e.g.:  
-`g'''_result` will be assigned to `f'''_result` and only then `g''(f''_result)` will be executed. 
+`g'''_result` will be assigned to `f''_result` and only then `g''(f''_result)` will be executed. 
 As one can notice there are a lot of nested calls which are leading to stack overflow.  
-This happens because call to `f` is not in a tail position because one needs the resulting value to be fed into `g`
+This happens because call to `f` is not in a tail position and one needs the resulting value to be fed into `g`
 and thus call to `f`, can not be optimized.
 Maybe this issue could be solved with our trampoline? Let's try it out!  
 ```scala
@@ -399,15 +402,15 @@ g_result = g(f_result)
 ```
 The legend is same - inner function returns the value to the first variable above.  
 As one can see executing `run` inside of `andThenTrampolined` leads to subsequent `run` and `f` calls 
-which overflows the stack.
-So, the general problem is more or less clear - stack overflow happens when there is to many instances
-of a functions (or function calls) on the stack.
-The solution is also more or less clear - let's use the function as a constructors of
-the structures on heap, which is potentially much bigger than stack, holding `delayed` function calls.
+which overflows the stack.  
+So, the general problem is more or less clear - stack overflow happens when there are to many instances
+of a functions (or function calls) on the stack.  
+The solution is also more or less clear - let's use the functions as a constructors of
+the structures on heap, which is potentially much bigger than the stack. Those structures will hold `delayed` function calls.
 The main question now - can we apply this solution to a problem with `andThen` and trade somehow stack for heap?
 
 Let's start solving this puzzle with defining a structure which could handle the situation when one should act
-on a returning value:
+on a returning value:  
 [StackBasedTrampoline.scala](continuations_playground/src/main/scala/trampolines/StackBasedTrampoline.scala)
 ```scala
 sealed trait Trampoline[+A]
@@ -437,13 +440,14 @@ But it's again reminds the left-associated list:
 tail -> (((((a, f'''), g'''), g''), g'), g) <- head
 <----------------- stack grows this way ------
 ```
-Could such a trampoline be written to allow one to reassociate the deeply nested `Call`'s on the go like this:   
+Could such a trampoline be written to allow one to reassociate deeply nested `Call`'s on the go like this:   
 ```
     right-associated list
 ------- result returned this way ------------>
 tail -> (a, (f''', (g''', (g'', (g', g))))) <- head
 ```
-Use right associated structure - List:  
+Yes, it could! To do so one need to use right-associated data-structure to store all the continuations
+while going to the last of the nested Cont's:  
 ```scala
 def run[A](t: Trampoline[A]): A = {
     var curr: Trampoline[Any] = t
@@ -472,7 +476,25 @@ def run[A](t: Trampoline[A]): A = {
     res.get
 }
 ```
+The code above on each Cont will populate the stack with it's function. When nested Cont's will be
+terminated with Done, one end up with all the functions from Cont's laying in stack data-structure in
+reverse order. Then all this functions will be applied one by one to the value in Done.  
+Consider an example we saw before:  
+```
+Cont(Cont(Cont(Cont(Cont(Done(a), f'''), g'''), g''), g'), g)
+```
+1. Outer Cont is interpreted, stack now holds [`g`], next value to interpret is nested Cont.  
+2. Nested Cont is interpreted, stack now holds [`g'`, `g`] ....  
+....  
+5. Inner Cont is interpreted, stack now holds [`f'''`, `g'''`, `g''`, `g'`, `g`]  
+6. Done is interpreted, pop the stack and apply `f'''` to the value in Done.  
+7. Done is interpreted, pop the stack and apply `g'''` to the value in Done.  
+....  
+10. Done is interpreted, pop the stack and apply `g` to the value in Done.  
+11. Stack is empty, assign value to result.  
+12. Exit loop, return result.  
 
+Now the code below will not overflow the stack:  
 ```scala
 def idTrampolined[A](a: A): Trampoline[A] = Done(a)
 
@@ -482,9 +504,8 @@ run{
 // res9: Int = 1
 ```
 
-Could it be written in a more functional way with use of tail recursion?
+Could it be written in a more functional way with use of tail recursion?  
 [PureTrampoline.scala](continuations_playground/src/main/scala/trampolines/PureTrampoline.scala)
-
 ```scala
 @scala.annotation.tailrec
 final def run[A](t: Trampoline[A]): A = {
@@ -501,7 +522,7 @@ final def run[A](t: Trampoline[A]): A = {
     }
 }
 ```
-To understand how Cont's structure being rewritten consider the following example:
+To understand how Cont's structure being rewritten consider the following example:  
 ```scala
 def plusOne(x: Int): Trampoline[Int] = Done(x + 1)
 def plusTwo(x: Int): Trampoline[Int] = Done(x + 2)
@@ -556,20 +577,19 @@ val res3 =
 // res3: Cont[Int, Int] = Cont(Done(1), <function1>)
 ```
 In the end run loop gradually rewrites all the nested Cont's to functions, which returns Cont's and
-applying them in the right order.
+applying them in the right order.  
 
 The last thing one could notice is that we explored the rewriting rules using continuations and associativity law,
-and it is a strong clue that one can implement a monad.
-And it is particularly true in this case:
+and it is a strong clue that one can implement a monad:  
 ```scala
 def flatMap[A, B](t: Trampoline[A])(f: A => Trampoline[B]): Trampoline[B] = Cont(t, f)
 ```
-With shiny new flatMap `andThenTrampolined` could be rewritten in the following way:
+With shiny new flatMap `andThenTrampolined` could be rewritten in the following way:  
 ```scala
 def andThenTrampolined2[A, B, C](f: A => Trampoline[B], g: B => Trampoline[C]): A => Trampoline[C] =
     (a: A) => More(() => {
         flatMap(f(a))(result => g(result))
     })
 ```
-One last thing to notice - one needs to wrap all calls into `More` constructor, in other case
-calls to `f` will not be trampolined and the stack will be blown.
+One last thing to notice - one needs to wrap all calls into `More` constructor, in other case  
+calls to `f` will not be trampolined and the stack will be blown.  
