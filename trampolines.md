@@ -205,17 +205,17 @@ Consider this function:
 [WhileLoop.scala](continuations_playground/src/main/scala/trampolines/WhileLoop.scala)
 ```scala
 def callee(n: Int): Int = {
-		var nLoop = n
-		do {
-			nLoop -= 1
-		} while (nLoop != 0)
-		nLoop
-	}
+    var nLoop = n
+    do {
+        nLoop -= 1
+    } while (nLoop != 0)
+    nLoop
+}
 
-	def caller(n: Int): Int =
-		callee(n)
+def caller(n: Int): Int =
+    callee(n)
 
-	caller(1000000)
+caller(1000000)
 // res0: Int = 0
 ```
 It's just a simple while loop which decrements the variable.  
@@ -223,13 +223,13 @@ As one can see it is verbose and could be rewritten more elegantly with recursio
 [TailRecursion.scala](continuations_playground/src/main/scala/trampolines/TailRecursion.scala)
 ```scala
 @scala.annotation.tailrec
-	final def callee(n: Int): Int =
-		if (n == 0) n else callee(n - 1)
+final def callee(n: Int): Int =
+    if (n == 0) n else callee(n - 1)
 
-	def caller(n: Int): Int =
-		callee(n)
+def caller(n: Int): Int =
+    callee(n)
 
-	caller(1000000)
+caller(1000000)
 // res2: Int = 0
 ```
 Result will be the same, but code is much more concise. That is the power of optimizing
@@ -240,13 +240,13 @@ What if one wants a stack-safe mutual recursion? Like in the following example:
 [MutualRecursion.scala](continuations_playground/src/main/scala/trampolines/MutualRecursion.scala)
 ```scala
 def calleeA(n: Int): Int =
-        if (n == 0) n else calleeB(n - 1)
+    if (n == 0) n else calleeB(n - 1)
 
-    def calleeB(n: Int): Int =
-        if (n == 0) n else calleeA(n - 1)
+def calleeB(n: Int): Int =
+    if (n == 0) n else calleeA(n - 1)
 
-    def callerAB(n: Int) =
-        calleeA(n)
+def callerAB(n: Int) =
+    calleeA(n)
 ``` 
 It turns out that this code will blows the stack because general tail call optimization
 currently is not supported in Scala compiler. But there is a good thing - it could be fixed in
@@ -259,47 +259,47 @@ Let's see how it could be done:
 [SimpleTrampoline.scala](continuations_playground/src/main/scala/trampolines/SimpleTrampoline.scala)
 ```scala
 // ADT for holding either thunk or result
-	sealed trait Trampoline[+A]
-	// structure which signalise that computation is over with the value `a` of type `A`
-	final case class Done[A](result: A) extends Trampoline[A]
-	// structure which holding a thunk, signalise that this thunk should be executed
-	final case class More[A](f: () => Trampoline[A]) extends Trampoline[A]
+sealed trait Trampoline[+A]
+// structure which signalise that computation is over with the value `a` of type `A`
+final case class Done[A](result: A) extends Trampoline[A]
+// structure which holding a thunk, signalise that this thunk should be executed
+final case class More[A](f: () => Trampoline[A]) extends Trampoline[A]
 
-    // trampoline itself, written as a while loop
-	def run[A](t: Trampoline[A]): A = {
-	    // current structure, updated on each cycle
-		var curr: Trampoline[A] = t
-		// result which will be returned when the computation will be finished
-		var res: Option[A] = None
-		// while computation is not finished
-		while (res.isEmpty) {
-		    // check what trampoline structure we have
-			curr match {
-			    // if Done - computation is finished, assign the result
-				case Done(result) =>
-					res = Some(result)
-                // if more, execute thunk and go on the other cycle
-				case More(k) =>
-					curr = k()
-			}
-		}
-		// return the actual result
-		res.get
-	}
+// trampoline itself, written as a while loop
+def run[A](t: Trampoline[A]): A = {
+    // current structure, updated on each cycle
+    var curr: Trampoline[A] = t
+    // result which will be returned when the computation will be finished
+    var res: Option[A] = None
+    // while computation is not finished
+    while (res.isEmpty) {
+        // check what trampoline structure we have
+        curr match {
+            // if Done - computation is finished, assign the result
+            case Done(result) =>
+                res = Some(result)
+            // if more, execute thunk and go on the other cycle
+            case More(k) =>
+                curr = k()
+        }
+    }
+    // return the actual result
+    res.get
+}
 
-    // notice - every subsequent call is wrapped in `More`
-    // this makes the function not to grow the stack,
-    // but return with a thunk
-	def calleeA(n: Int): Trampoline[Int] =
-		if (n == 0) Done(n) else More(() => calleeB(n - 1))
+// notice - every subsequent call is wrapped in `More`
+// this makes the function not to grow the stack,
+// but return with a thunk
+def calleeA(n: Int): Trampoline[Int] =
+    if (n == 0) Done(n) else More(() => calleeB(n - 1))
 
-	def calleeB(n: Int): Trampoline[Int] =
-		if (n == 0) Done(n) else More(() => calleeA(n - 1))
+def calleeB(n: Int): Trampoline[Int] =
+    if (n == 0) Done(n) else More(() => calleeA(n - 1))
 
-	def callerAB(n: Int): Trampoline[Int] =
-		calleeA(n)
+def callerAB(n: Int): Trampoline[Int] =
+    calleeA(n)
 
-	run(callerAB(1000000))
+run(callerAB(1000000))
 // res5: Int = 0
 ```
 This code will be safely executed without blowing the stack. Could the run function be less verbose?
@@ -307,12 +307,12 @@ Yes! Lets try to use tail-recursion instead of while loop:
 [SimpleTrampolineTailRecursive.scala](continuations_playground/src/main/scala/trampolines/SimpleTrampolineTailRecursive.scala)
 ```scala
 @scala.annotation.tailrec
-	final def run[A](t: Trampoline[A]): A = {
-		t match {
-			case Done(result) => result
-			case More(k) => run(k())
-		}
-	}
+final def run[A](t: Trampoline[A]): A = {
+    t match {
+        case Done(result) => result
+        case More(k) => run(k())
+    }
+}
 ```
 This version I like much more.
 There is still a case where such approach will not work. What if one wants to to something after the value will be returned?
@@ -320,11 +320,11 @@ Consider the following example:
 [FunctionCompositionProblem.scala](continuations_playground/src/main/scala/trampolines/FunctionCompositionProblem.scala)
 ```scala
 def andThen[A, B, C](f: A => B, g: B => C): A => C = (a: A) => {
-		val result = f(a)
-		g(result)
-	}
+    val result = f(a)
+    g(result)
+}
 
-	def id[A](a: A): A = a
+def id[A](a: A): A = a
 ```
 Let's take a closer look on what happens here. Imagine the following call sequence:
 ```
@@ -366,13 +366,13 @@ and thus call to `f`, can not be optimized.
 Maybe this issue could be solved with our trampoline? Let's try it out!  
 ```scala
 def andThenTrampolined[A, B, C](f: A => Trampoline[B], g: B => Trampoline[C]): A => Trampoline[C] =
-		(a: A) => More(() => {
-			val resultTrampoline = f(a) // returns Trampolined call
-			val result = run(resultTrampoline) // run trampoline to obtain results
-			g(result)
-		})
+    (a: A) => More(() => {
+        val resultTrampoline = f(a) // returns Trampolined call
+        val result = run(resultTrampoline) // run trampoline to obtain results
+        g(result)
+    })
 
-	def idTrampolined[A](a: A): Trampoline[A] = Done(a)
+def idTrampolined[A](a: A): Trampoline[A] = Done(a)
 ```
 
 Unfortunately the stack overflow still happening, the reason is the same but now it's a little bit more indirect.
@@ -411,20 +411,20 @@ on a returning value:
 [StackBasedTrampoline.scala](continuations_playground/src/main/scala/trampolines/StackBasedTrampoline.scala)
 ```scala
 sealed trait Trampoline[+A]
-	final case class Done[A](result: A) extends Trampoline[A]
-	final case class More[A](f: () => Trampoline[A]) extends Trampoline[A]
-	// Cont for continuation
-	// constructor for applying function on the right to value on the left
-	// the point is to emulate the stack in the heap
-	final case class Cont[A, B](a: Trampoline[A], f: A => Trampoline[B]) extends Trampoline[B]
+final case class Done[A](result: A) extends Trampoline[A]
+final case class More[A](f: () => Trampoline[A]) extends Trampoline[A]
+// Cont for continuation
+// constructor for applying function on the right to value on the left
+// the point is to emulate the stack in the heap
+final case class Cont[A, B](a: Trampoline[A], f: A => Trampoline[B]) extends Trampoline[B]
 ```
 Okay, now the `andThenTrampolined` could be rewritten in the following way:
 ```scala
 // return after every call
-	def andThenTrampolined[A, B, C](f: A => Trampoline[B], g: B => Trampoline[C]): A => Trampoline[C] =
-		(a: A) => More(() => {
-			Cont(f(a), result => g(result))
-		})
+def andThenTrampolined[A, B, C](f: A => Trampoline[B], g: B => Trampoline[C]): A => Trampoline[C] =
+    (a: A) => More(() => {
+        Cont(f(a), result => g(result))
+    })
 ```
 Now what one get is the structure with nested `Cont`:  
 ```
@@ -476,9 +476,9 @@ def run[A](t: Trampoline[A]): A = {
 ```scala
 def idTrampolined[A](a: A): Trampoline[A] = Done(a)
 
-	run{
-		List.fill(100000)(idTrampolined[Int](_)).foldLeft(idTrampolined[Int](_))(andThenTrampolined)(1)
-	}
+run{
+    List.fill(100000)(idTrampolined[Int](_)).foldLeft(idTrampolined[Int](_))(andThenTrampolined)(1)
+}
 // res9: Int = 1
 ```
 
