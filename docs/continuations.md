@@ -40,7 +40,8 @@ programMayFail(123)
 scala.util.Try(programMayFail(1234)).isFailure
 ```
 How can we protect ourselves? The easiest way is to add null checks.
-But this way has it's own drawbacks: such checkings are not composable.
+But this way has it's own drawbacks: such checkings are not composable - there is no dedicated composition operator,
+thus this code needs to be repeated over and over again.  
 ```scala mdoc
 def programNullChecked(id: Long): Info = {
     val user = getUser(id)
@@ -79,9 +80,12 @@ def optional[R, T](v: => T)(k: T => R): R = {
 ```
 Now the program is safe, but let's take a closer look on the control flow:
 ```scala mdoc
+def identity[A](a: A): A = a
+
 def programOptional(id: Long): Info = {
     optional(getUser(id)) { user: User => // this function is our "k: T => R" where T - User and R - Info
-        optional(getInfo(user))(identity) // one need to call identity as the rest of computation to acquire the value from the previous step
+        // one need to call identity as the rest of computation to acquire the value from the previous step
+        optional(getInfo(user))(identity) 
     }
 }
 programOptional(123)
