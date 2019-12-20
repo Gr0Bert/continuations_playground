@@ -2,7 +2,7 @@ package concurrency
 
 import scala.concurrent.Future
 
-object AsyncIO extends App {
+object AsyncIO {
 	sealed trait IO[+A] {
 		def flatMap[B](f: A => IO[B]): IO[B] = Cont(this, f)
 		def map[B](f: A => B): IO[B] = flatMap(a => Done(f(a)))
@@ -63,7 +63,11 @@ object AsyncIO extends App {
 		}
 		loop(t)(Nil)
 	}
+}
 
+object Examples0 extends App {
+	import AsyncIO._
+	
 	def andThenTrampolined[A, B, C](f: A => IO[B], g: B => IO[C]): A => IO[C] =
 		(a: A) => More(() => {
 			Cont(f(a), result => g(result))
@@ -83,7 +87,7 @@ object AsyncIO extends App {
 					x()
 				}(IO.ec)
 			}).flatMap { x =>
-					println {
+				println {
 					Thread.currentThread().getName
 				}
 				IO.shift.flatMap{ _ => More(() => {
@@ -96,7 +100,7 @@ object AsyncIO extends App {
 				}
 			}
 		}(_ => Done(-1))
-	
+
 	runAsync(t)((x: Either[Throwable, Int]) => println(x))
 	runAsync(
 		List.fill(100000)(idTrampolined[Int](_)).foldLeft(idTrampolined[Int](_))(andThenTrampolined)(1))(
@@ -104,7 +108,7 @@ object AsyncIO extends App {
 	)
 }
 
-object Test extends App {
+object Examples1 extends App {
 	import AsyncIO._
 	def plusOne(x: Int): IO[Int] = Done(x + 1)
 	def plusTwo(x: Int): IO[Int] = Done(x + 2)
