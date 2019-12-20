@@ -64,7 +64,6 @@ object AsyncIO extends App {
 		loop(t)(Nil)
 	}
 
-	// return after every call
 	def andThenTrampolined[A, B, C](f: A => IO[B], g: B => IO[C]): A => IO[C] =
 		(a: A) => More(() => {
 			Cont(f(a), result => g(result))
@@ -97,11 +96,57 @@ object AsyncIO extends App {
 				}
 			}
 		}(_ => Done(-1))
-	println{
-//		runAsync(t)((x: Either[Throwable, Int]) => println(x))
-		runAsync(
-			List.fill(100000)(idTrampolined[Int](_)).foldLeft(idTrampolined[Int](_))(andThenTrampolined)(1))(
-			(x: Either[Throwable, Int]) => println(x)
-		)
+	
+	runAsync(t)((x: Either[Throwable, Int]) => println(x))
+	runAsync(
+		List.fill(100000)(idTrampolined[Int](_)).foldLeft(idTrampolined[Int](_))(andThenTrampolined)(1))(
+		(x: Either[Throwable, Int]) => println(x)
+	)
+}
+
+object Test extends App {
+	import AsyncIO._
+	def plusOne(x: Int): IO[Int] = Done(x + 1)
+	def plusTwo(x: Int): IO[Int] = Done(x + 2)
+	def plusThree(x: Int): IO[Int] = Done(x + 3)
+	
+	def plusOneCps(x: Int)(f: Int => Unit): Unit = f(x + 1)
+	def plusTwoCps(x: Int)(f: Int => Unit): Unit = f(x + 2)
+	def plusThreeCps(x: Int)(f: Int => Unit): Unit = f(x + 3)
+	
+	runAsync{
+		plusOne(1)
+			.flatMap(plusTwo)
+			.flatMap{ x => 
+				handle(More(() => {
+					throw new RuntimeException("test")
+					plusThree(x)
+				})) { e: Throwable => More(() => Done(-1)) }
+			}
+	}(x => println(x))
+
+	runAsync{
+		Cont(
+			Cont(plusOne(1), plusTwo),
+			(x: Int) => Handle(
+				More(() => {
+					throw new RuntimeException("test")
+					plusThree(x)
+				}),
+				(_: Throwable) => More(() => Done(-1))
+			)
+	)}(x => println(x))
+
+	plusOneCps(1){ x =>
+		plusTwoCps(x){ x =>
+			try {
+				throw new RuntimeException("test")
+				plusThreeCps(x){ x =>
+					println(x)
+				}
+			} catch {
+				case _: Throwable => println(-1)
+			}
+		}
 	}
 }
