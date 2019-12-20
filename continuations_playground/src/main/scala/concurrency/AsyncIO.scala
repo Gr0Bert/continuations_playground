@@ -137,6 +137,22 @@ object Test extends App {
 			)
 	)}(x => println(x))
 
+	runAsync{
+		Cont(
+			plusOne(1),
+			(x: Int) => 
+				Cont(
+					plusTwo(x),
+					(x: Int) => Handle(
+						More(() => {
+							throw new RuntimeException("test")
+							plusThree(x)
+						}),
+						(_: Throwable) => More(() => Done(-1))
+					)		
+				)
+		)}(x => println(x))
+
 	plusOneCps(1){ x =>
 		plusTwoCps(x){ x =>
 			try {
