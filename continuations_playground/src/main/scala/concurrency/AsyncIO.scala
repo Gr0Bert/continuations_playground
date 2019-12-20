@@ -15,7 +15,7 @@ object AsyncIO extends App {
 	final case class Async[A](k: (Either[Throwable, A] => Unit) => Unit) extends IO[A]
 	final case class Raise[A](e: Throwable) extends IO[A]
 	final case class Handle[A](a: IO[A], h: Throwable => IO[A]) extends IO[A]
-
+	
 	object IO {
 		import scala.concurrent.ExecutionContext.global
 		val ec = global
@@ -30,46 +30,38 @@ object AsyncIO extends App {
 	}
 
 	final def runAsync[A](t: IO[A])(cb: Either[Throwable, A] => Unit): Unit = {
-		t match {
-			case Done(result) => cb(Right(result))
-			case Raise(e) => cb(Left(e))
-			case Async(k) => k(cb)
+		def safeCall(k: () => IO[Any]): IO[Any] = try {
+			k()
+		} catch {
+			case e: Throwable => Raise(e)
+		}
+		val erasedCb = cb.asInstanceOf[Either[Throwable, Any] => Unit]
+		def loop(current: IO[Any])(errorHandlers: List[Throwable => IO[Any]]): IO[Any] = current match {
+			case Async(k) => Done(k(erasedCb))
+			case Done(result) => Done(erasedCb(Right(result)))
+			case Raise(e) => errorHandlers match {
+				case h :: errorHandlers => loop(h(e))(errorHandlers)
+				case Nil => Done(cb(Left(e)))
+			}
+			case Handle(a, h) => loop(a)(h :: errorHandlers)
+			case More(k) => loop(safeCall(k))(errorHandlers)
+			case Cont(Done(v), f) => loop(f(v))(errorHandlers)
+			case Cont(More(k), f) => loop(Cont(safeCall(k), f))(errorHandlers)
+			case Cont(Cont(b, g), f) => loop(Cont(b, (x: Any) => Cont(g(x), f)))(errorHandlers)
+			case Cont(Handle(a, h), f) => loop(Cont(a, f))(h :: errorHandlers)
+			case Cont(Raise(e), _) => loop(Raise(e))(errorHandlers)
 			case Cont(Async(k), f) =>
 				val rest = (a: Either[Throwable, Any]) => {
 					a match {
-						case Left(value) =>
-							cb(Left(value))
+						case Left(value) => erasedCb(Left(value))
 						case Right(value) =>
-							runAsync[A]{
-								loop(f(value), Nil).asInstanceOf[IO[A]]
-							}(cb)
+							loop(f(value))(errorHandlers)
 							()
 					}
 				}
-				k(rest)
-			case rest => runAsync[A](loop(rest, Nil).asInstanceOf[IO[A]])(cb) 
+				Done(k(rest))
 		}
-
-		@scala.annotation.tailrec
-		def loop(t: IO[Any], handler: List[Throwable => IO[Any]]): IO[Any] = {
-			println(handler.size)
-			t match {
-				case Raise(e) => handler match {
-					case h :: rest => 
-						println("use handler")
-						loop(h(e), rest)
-					case Nil =>
-						println("raise")
-						Raise(e)
-				}
-				case Handle(a, h) => loop(a, h :: handler)
-				case More(k) => loop(k(), handler)
-				case Cont(Done(v), f) => loop(f(v), handler)
-				case Cont(More(k), f) => loop(Cont(k(), f), handler)
-				case Cont(Cont(b, g), f) => loop(Cont(b, (x: Any) => Cont(g(x), f)), handler)
-				case x => x
-			}
-		}
+		loop(t)(Nil)
 	}
 
 	// return after every call
@@ -81,6 +73,7 @@ object AsyncIO extends App {
 	def idTrampolined[A](a: A): IO[A] = Done(a)
 
 	val t =
+		handle{
 			IO.async[Int](k => {
 				Future(() => {
 					println{
@@ -91,23 +84,24 @@ object AsyncIO extends App {
 					x()
 				}(IO.ec)
 			}).flatMap { x =>
-				handle{
 					println {
 					Thread.currentThread().getName
 				}
-				IO.shift.flatMap{ _ =>
+				IO.shift.flatMap{ _ => More(() => {
 					println{
 						s"In done thread: ${Thread.currentThread().getName}"
 					}
+					throw new RuntimeException("test")
 					Done(x)
-				}.raise(new RuntimeException("test"))
-			}(_ => Done(-1))
-		}
+				})
+				}
+			}
+		}(_ => Done(-1))
 	println{
-		runAsync(t)((x: Either[Throwable, Int]) => println(x))
-//		runAsync(
-//			List.fill(100000)(idTrampolined[Int](_)).foldLeft(idTrampolined[Int](_))(andThenTrampolined)(1))(
-//			(x: Either[Throwable, Int]) => println(x)
-//		)
+//		runAsync(t)((x: Either[Throwable, Int]) => println(x))
+		runAsync(
+			List.fill(100000)(idTrampolined[Int](_)).foldLeft(idTrampolined[Int](_))(andThenTrampolined)(1))(
+			(x: Either[Throwable, Int]) => println(x)
+		)
 	}
 }
