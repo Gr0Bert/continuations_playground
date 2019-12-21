@@ -25,8 +25,11 @@ object AsyncIO {
 				cb(rightUnit)
 			}
 		}
+
+		def apply[A](a: => A): IO[A] = More(() => Done(a))
 		
 		def async[A](k: (Either[Throwable, A] => Unit) => Unit): IO[A] = Async(k)
+
 	}
 
 	final def runAsync[A](t: IO[A])(cb: Either[Throwable, A] => Unit): Unit = {
