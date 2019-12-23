@@ -67,11 +67,8 @@ object Primitives {
 
 		@tailrec
 		final def complete(a: A): IO[Unit] = {
-			println("complete")
 			ref.get match {
-				case Present(_) =>
-					throw new IllegalStateException("Deferred already completed")
-
+				case Present(_) => IO(())
 				case s @ Absent(_) =>
 					if (ref.compareAndSet(s, Present(a))) {
 						val list = s.handlers
@@ -91,19 +88,11 @@ object Test extends App {
 	import AsyncIO._
 	import Primitives._
 
-	def spawn[A](fa: IO[A]): IO[IO[A]] = async{ k =>
-		val p = Deferred[A].flatMap{ d =>
-			runAsync(shift.flatMap(_ => fa.flatMap(d.complete)))(_ => ())
-			d.get
-		}
-		k(Right(p))
-	}
-
 	runAsync{
 		for {
-			x <- spawn{
+			x <- IO.start{
 				IO(Thread.sleep(5000)).flatMap(_ => Done("world"))
-			}.flatMap(identity)
+			}.flatMap{ case (join, _) => join }
 			_ <- IO(println(s"Hello, $x!"))
 		} yield {
 			()
